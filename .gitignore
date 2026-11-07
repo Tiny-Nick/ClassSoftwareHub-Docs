@@ -1,0 +1,7 @@
+# 投稿整理工作流在本机/CI 里生成的中间文件，不入库
+submission-message.md
+submission-title.txt
+submission-pr-body.md
+validation.log
+validation-message.md
+failure-message.md
