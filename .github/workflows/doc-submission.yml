@@ -73,23 +73,29 @@ jobs:
           git checkout -b "docs/issue-$ISSUE_NUMBER"
           git add -- "文档库"
           git commit -m "$(cat submission-title.txt)"
+          # 同一条 issue 重跑时，上一次可能已经把分支推上去了；先删远端同名分支再推，
+          # 否则会因为非快进而失败，看起来像新问题。删不掉（不存在）不算错。
+          git push origin --delete "docs/issue-$ISSUE_NUMBER" || true
           git push -u origin "docs/issue-$ISSUE_NUMBER"
           url=$(gh pr create --draft --base main --head "docs/issue-$ISSUE_NUMBER" \
             --title "$(cat submission-title.txt)" --body-file submission-pr-body.md)
           printf '\n草稿 PR：%s\n' "$url" >> submission-message.md
           gh issue comment "$ISSUE_NUMBER" --body-file submission-message.md
 
-      # 内容与格式都过了，却卡在后面的分支/提交/开 PR 上（例如分支重名、接口临时异常）。
-      # 这种情况同样要回帖说明并关闭，否则 issue 会一直挂着没人跟。
-      # 只在前两个分支都没走时才执行，避免对同一条 issue 重复回帖、重复关闭。
-      - name: 意外失败时回帖并关闭
+      # 内容与格式都过了，却卡在后面的分支/提交/开 PR 上（例如分支重名、接口临时异常、
+      # 仓库没有允许 Actions 创建 PR）。这类问题是流程自身出错，投稿内容本身不需要改，
+      # 因此只回帖加标签、不关闭 issue —— 关掉会让正确的投稿白白流失。
+      # 只在前两个分支都没走时才执行，避免对同一条 issue 重复回帖。
+      - name: 意外失败时回帖并标记待处理
         if: failure() && steps.build.outcome == 'success' && steps.validate.outcome != 'failure'
         continue-on-error: true
         run: |
           {
-            printf '这条投稿的自动整理没有跑完：内容与格式已通过检查，但在生成分支或草稿 PR 时出错。\n\n'
-            printf '投稿正文仍保留在本条 issue 里。请由维护者按内容重新整理，或由投稿人重新提交一份新的投稿。\n\n'
-            printf '这条 issue 已自动关闭；如需继续处理，重新打开即可。\n'
+            printf '这条投稿的自动整理没有跑完：内容与格式都通过了检查，但在生成分支或草稿 PR 时出错。\n\n'
+            printf '这种情况属于流程本身的问题，投稿内容不需要修改，issue 已保留待维护者处理。\n\n'
+            printf '维护者可按以下顺序处理：先在仓库设置中确认允许 Actions 创建拉取请求；\n'
+            printf '再到本条 issue 的运行记录里重新运行一次，或者用下面的分支手动开草稿 PR。\n\n'
+            printf '分支名：`docs/issue-%s`\n' "$ISSUE_NUMBER"
           } > failure-message.md
           gh issue comment "$ISSUE_NUMBER" --body-file failure-message.md || true
-          gh issue close "$ISSUE_NUMBER" --reason "not planned" || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "需要人工处理" || true
