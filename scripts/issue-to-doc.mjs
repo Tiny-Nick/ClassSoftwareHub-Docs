@@ -21,10 +21,23 @@ const clean = (text) => {
 const heading = (label) => `### ${label}`;
 const contentMarker = `\n${heading('正文')}\n`;
 
+// 投稿人常把整篇正文放进一层围栏（```markdown … ```），免得在 issue 里被渲染成排版。
+// 原样写进 article.md 会让客户端把全文当成一个代码块，这里剥掉最外层那一层；
+// 正文内部本来就有代码块时（围栏成对），剥完仍然完整。
+const stripOuterFence = (text) => {
+  const trimmed = text.trim();
+  const match = /^```[^\n]*\n([\s\S]*)\n```$/.exec(trimmed);
+  if (!match) return trimmed;
+  const inner = match[1].trim();
+  if (!inner) return trimmed;
+  const fenceCount = (inner.match(/^```/gm) ?? []).length;
+  return fenceCount % 2 === 0 ? inner : trimmed;
+};
+
 // 正文是最后一个字段：先切出去，避免正文里的 "### 文章标题" 之类被当成表单字段。
 const markerIndex = issueBody.indexOf(contentMarker);
 const head = markerIndex < 0 ? issueBody : issueBody.slice(0, markerIndex);
-const content = clean(markerIndex < 0 ? '' : issueBody.slice(markerIndex + contentMarker.length));
+const content = stripOuterFence(clean(markerIndex < 0 ? '' : issueBody.slice(markerIndex + contentMarker.length)));
 
 const field = (label) => {
   const match = new RegExp(`(?:^|\\n)${escapeRe(heading(label))}\\n+([\\s\\S]*?)(?=\\n### |$)`).exec(head);
