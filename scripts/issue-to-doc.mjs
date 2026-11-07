@@ -81,7 +81,7 @@ if (problems.length > 0) {
     '',
     ...problems.map((text) => `- ${text}`),
     '',
-    '改好后请重新开一份投稿（编辑原 issue 不会重新触发整理）。',
+    '这条投稿会自动关闭。改好后请重新提交一份新的投稿 —— 编辑或重开这条 issue 都不会重新触发自动整理。',
   ].join('\n'));
   console.error(problems.join('\n'));
   process.exit(1);

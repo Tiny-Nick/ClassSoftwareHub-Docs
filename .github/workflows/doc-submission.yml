@@ -36,9 +36,11 @@ jobs:
         continue-on-error: true
         run: node scripts/issue-to-doc.mjs
 
-      - name: 回帖说明哪里不合格
+      - name: 回帖说明哪里不合格并关闭
         if: steps.build.outcome == 'failure'
-        run: gh issue comment "$ISSUE_NUMBER" --body-file submission-message.md
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body-file submission-message.md
+          gh issue close "$ISSUE_NUMBER" --reason "not planned"
 
       - name: 中止
         if: steps.build.outcome == 'failure'
@@ -51,15 +53,17 @@ jobs:
           set -o pipefail
           node scripts/validate-docs.mjs 2>&1 | tee validation.log
 
-      - name: 校验失败时回帖
+      - name: 校验失败时回帖并关闭
         if: steps.validate.outcome == 'failure'
         run: |
           {
             printf '自动整理生成了目录，但没通过文档库校验：\n\n```\n'
             tail -30 validation.log
-            printf '```\n'
+            printf '```\n\n'
+            printf '这条投稿已经关闭。请按上面的提示改好后，重新提交一份新的投稿 —— 编辑或重开这条 issue 都不会重新触发自动整理。\n'
           } > validation-message.md
           gh issue comment "$ISSUE_NUMBER" --body-file validation-message.md
+          gh issue close "$ISSUE_NUMBER" --reason "not planned"
           exit 1
 
       - name: 提交分支并开草稿 PR
@@ -74,3 +78,18 @@ jobs:
             --title "$(cat submission-title.txt)" --body-file submission-pr-body.md)
           printf '\n草稿 PR：%s\n' "$url" >> submission-message.md
           gh issue comment "$ISSUE_NUMBER" --body-file submission-message.md
+
+      # 内容与格式都过了，却卡在后面的分支/提交/开 PR 上（例如分支重名、接口临时异常）。
+      # 这种情况同样要回帖说明并关闭，否则 issue 会一直挂着没人跟。
+      # 只在前两个分支都没走时才执行，避免对同一条 issue 重复回帖、重复关闭。
+      - name: 意外失败时回帖并关闭
+        if: failure() && steps.build.outcome == 'success' && steps.validate.outcome != 'failure'
+        continue-on-error: true
+        run: |
+          {
+            printf '这条投稿的自动整理没有跑完：内容与格式已通过检查，但在生成分支或草稿 PR 时出错。\n\n'
+            printf '投稿正文仍保留在本条 issue 里。请由维护者按内容重新整理，或由投稿人重新提交一份新的投稿。\n\n'
+            printf '这条 issue 已自动关闭；如需继续处理，重新打开即可。\n'
+          } > failure-message.md
+          gh issue comment "$ISSUE_NUMBER" --body-file failure-message.md || true
+          gh issue close "$ISSUE_NUMBER" --reason "not planned" || true
